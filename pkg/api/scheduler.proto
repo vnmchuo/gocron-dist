@@ -20,6 +20,9 @@ message AddJobRequest {
   google.protobuf.Timestamp schedule_time = 3;
   int64 repeat_interval_nanos = 4;
   int32 max_runs = 5;
+  int32 max_retries = 6;
+  int64 initial_backoff_nanos = 7;
+  int64 max_backoff_nanos = 8;
 }
 
 message AddJobResponse {

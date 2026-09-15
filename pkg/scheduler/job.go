@@ -13,6 +13,12 @@ type Job struct {
 	RunCount       int           `json:"run_count"`
 	RateLimitKey   string        `json:"rate_limit_key,omitempty"`
 	Weight         int           `json:"weight,omitempty"`
+
+	// Retry Policy
+	MaxRetries     int           `json:"max_retries,omitempty"`     // Max retry attempts upon execution failure
+	RetryCount     int           `json:"retry_count,omitempty"`     // Current number of retries attempted
+	InitialBackoff time.Duration `json:"initial_backoff,omitempty"` // Initial backoff delay (default 1s if unset)
+	MaxBackoff     time.Duration `json:"max_backoff,omitempty"`     // Maximum cap for exponential backoff (default 1m if unset)
 }
 
 // PriorityQueue implements heap.Interface

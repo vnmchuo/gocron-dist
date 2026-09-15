@@ -68,6 +68,9 @@ func (s *Server) AddJob(ctx context.Context, req *AddJobRequest) (*AddJobRespons
 		NextRun:        req.ScheduleTime.AsTime(),
 		RepeatInterval: time.Duration(req.RepeatIntervalNanos),
 		MaxRuns:        int(req.MaxRuns),
+		MaxRetries:     int(req.MaxRetries),
+		InitialBackoff: time.Duration(req.InitialBackoffNanos),
+		MaxBackoff:     time.Duration(req.MaxBackoffNanos),
 	})
 
 	return &AddJobResponse{
@@ -84,6 +87,9 @@ func (s *Server) ForwardJob(ctx context.Context, j *scheduler.Job) error {
 		ScheduleTime:        timestamppb.New(j.NextRun),
 		RepeatIntervalNanos: int64(j.RepeatInterval),
 		MaxRuns:             int32(j.MaxRuns),
+		MaxRetries:          int32(j.MaxRetries),
+		InitialBackoffNanos: int64(j.InitialBackoff),
+		MaxBackoffNanos:     int64(j.MaxBackoff),
 	}
 	_, err := s.AddJob(ctx, req)
 	return err

@@ -3,8 +3,10 @@ package scheduler
 import (
 	"container/heap"
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -12,6 +14,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	go_trace "go.opentelemetry.io/otel/trace"
 )
+
+// ErrDoNotRetry can be returned by a JobExecutor to prevent retrying a failed job.
+var ErrDoNotRetry = errors.New("do not retry")
+
+// ErrJobDeferred can be returned by a JobExecutor when a job has been deferred/re-scheduled
+// (e.g. due to rate limiting) and should not be deleted from storage or marked as an error.
+var ErrJobDeferred = errors.New("job deferred")
 
 type Storer interface {
 	SaveJob(j *Job) error
@@ -27,6 +36,9 @@ type Storer interface {
 // If it returns an error, the error is recorded and job lifecycle is handled accordingly.
 type JobExecutor func(ctx context.Context, j *Job) error
 
+// DLQHandler is an optional callback invoked when a job exhausts all retry attempts.
+type DLQHandler func(ctx context.Context, j *Job, finalErr error)
+
 type Engine struct {
 	queue      JobQueue
 	mu         sync.Mutex
@@ -37,6 +49,7 @@ type Engine struct {
 	Cluster    Manager
 	Tracer     trace.Tracer
 	Executor   JobExecutor // Pluggable job execution callback
+	DLQHandler DLQHandler  // Dead Letter Queue callback on exhausted retries
 }
 
 type Router interface {
@@ -177,22 +190,25 @@ func (e *Engine) execute(j *Job) {
 		attribute.String("job_id", j.ID),
 		attribute.String("payload", j.Payload),
 		attribute.Int("run_count", j.RunCount),
+		attribute.Int("retry_count", j.RetryCount),
 	))
 	defer span.End()
+
+	var execErr error
 
 	// Execution must be safe from panics
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[Recover] Job %s failed: %v\n", j.ID, r)
-			span.RecordError(fmt.Errorf("panic: %v", r))
+			log.Printf("[Recover] Job %s panicked: %v\n", j.ID, r)
+			panicErr := fmt.Errorf("panic: %v", r)
+			span.RecordError(panicErr)
+			e.handleFailure(ctx, j, panicErr)
 		}
 	}()
 
 	if e.Executor != nil {
 		if err := e.Executor(ctx, j); err != nil {
-			log.Printf("[Engine] Job %s execution failed or deferred: %v\n", j.ID, err)
-			span.RecordError(err)
-			return
+			execErr = err
 		}
 	} else {
 		log.Printf("[%s] Executing job: %s\n", time.Now().Format("15:04:05"), j.Payload)
@@ -200,6 +216,19 @@ func (e *Engine) execute(j *Job) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	if execErr != nil {
+		if errors.Is(execErr, ErrJobDeferred) {
+			log.Printf("[Engine] Job %s deferred and re-queued by executor", j.ID)
+			return
+		}
+		log.Printf("[Engine] Job %s execution failed: %v\n", j.ID, execErr)
+		span.RecordError(execErr)
+		e.handleFailure(ctx, j, execErr)
+		return
+	}
+
+	// Succeeded: reset retry counter
+	j.RetryCount = 0
 	j.RunCount++
 
 	// Check if job should be repeated
@@ -212,7 +241,7 @@ func (e *Engine) execute(j *Job) {
 
 	if shouldRepeat {
 		j.NextRun = time.Now().Add(j.RepeatInterval)
-		log.Printf("[Scheduler] Re-scheduling job %s for %s\n", j.ID, j.NextRun.Format("15:04:05"))
+		log.Printf("[Scheduler] Re-scheduling recurring job %s for %s\n", j.ID, j.NextRun.Format("15:04:05"))
 		e.AddJobWithContext(ctx, j)
 	} else {
 		// Delete job from storage to prevent re-execution on restart
@@ -220,8 +249,83 @@ func (e *Engine) execute(j *Job) {
 			if err := e.Storage.DeleteJobWithContext(ctx, j.ID); err != nil {
 				log.Printf("[Error] Failed to delete job %s: %v\n", j.ID, err)
 			} else {
-				log.Printf("[Storage] Job %s deleted from disk\n", j.ID)
+				log.Printf("[Storage] Job %s completed and deleted from disk\n", j.ID)
 			}
+		}
+	}
+}
+
+func (e *Engine) handleFailure(ctx context.Context, j *Job, err error) {
+	if errors.Is(err, ErrDoNotRetry) {
+		log.Printf("[Engine] Job %s marked as non-retryable", j.ID)
+		e.terminalFailure(ctx, j, err)
+		return
+	}
+
+	if j.RetryCount < j.MaxRetries {
+		j.RetryCount++
+		delay := e.calculateBackoff(j)
+		j.NextRun = time.Now().Add(delay)
+		log.Printf("[Retry 🔄] Job %s failed (attempt %d/%d): %v. Retrying in %v (scheduled for %s)",
+			j.ID, j.RetryCount, j.MaxRetries, err, delay, j.NextRun.Format("15:04:05.000"))
+		e.AddJobWithContext(ctx, j)
+		return
+	}
+
+	// Max retries reached
+	e.terminalFailure(ctx, j, err)
+}
+
+func (e *Engine) calculateBackoff(j *Job) time.Duration {
+	base := j.InitialBackoff
+	if base <= 0 {
+		base = 1 * time.Second
+	}
+	maxB := j.MaxBackoff
+	if maxB <= 0 {
+		maxB = 1 * time.Minute
+	}
+
+	if base >= maxB {
+		return maxB
+	}
+
+	multiplier := 1
+	if j.RetryCount > 1 {
+		shift := j.RetryCount - 1
+		if shift > 30 {
+			shift = 30
+		}
+		multiplier = 1 << uint(shift)
+	}
+
+	backoff := time.Duration(multiplier) * base
+	if backoff > maxB || backoff <= 0 {
+		backoff = maxB
+	}
+
+	// Add Full Jitter: randomize between [base/2, backoff]
+	if backoff > base {
+		jitterRange := int64(backoff - base/2)
+		if jitterRange > 0 {
+			backoff = base/2 + time.Duration(rand.Int63n(jitterRange))
+		}
+	}
+
+	return backoff
+}
+
+func (e *Engine) terminalFailure(ctx context.Context, j *Job, err error) {
+	log.Printf("[DLQ / Failed ❌] Job %s exhausted all %d retries. Final error: %v",
+		j.ID, j.RetryCount, err)
+
+	if e.DLQHandler != nil {
+		e.DLQHandler(ctx, j, err)
+	}
+
+	if e.Storage != nil {
+		if delErr := e.Storage.DeleteJobWithContext(ctx, j.ID); delErr != nil {
+			log.Printf("[Error] Failed to delete failed job %s from storage: %v", j.ID, delErr)
 		}
 	}
 }
