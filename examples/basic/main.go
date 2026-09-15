@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vnmchuo/gocron-dist/internal/scheduler"
+	"github.com/vnmchuo/gocron-dist/pkg/scheduler"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 

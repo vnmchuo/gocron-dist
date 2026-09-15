@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/vnmchuo/gocron-dist/internal/scheduler"
+	"github.com/vnmchuo/gocron-dist/pkg/scheduler"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	go_trace "go.opentelemetry.io/otel/trace"

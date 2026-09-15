@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vnmchuo/gocron-dist/internal/hash"
-	"github.com/vnmchuo/gocron-dist/internal/scheduler"
+	"github.com/vnmchuo/gocron-dist/pkg/hash"
+	"github.com/vnmchuo/gocron-dist/pkg/scheduler"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"

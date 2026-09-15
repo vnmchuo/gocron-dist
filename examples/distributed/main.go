@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/vnmchuo/gocron-dist/internal/cluster"
-	"github.com/vnmchuo/gocron-dist/internal/hash"
-	"github.com/vnmchuo/gocron-dist/internal/scheduler"
+	"github.com/vnmchuo/gocron-dist/pkg/cluster"
+	"github.com/vnmchuo/gocron-dist/pkg/hash"
+	"github.com/vnmchuo/gocron-dist/pkg/scheduler"
 	"github.com/vnmchuo/gocron-dist/pkg/api"
 	"go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
@@ -32,7 +32,7 @@ func main() {
 	engine := scheduler.NewEngine(tracer)
 
 	// 2. Cluster Setup
-	c, err := cluster.NewCluster(nodeName, gossipPort, grpcPort, "", 
+	c, err := cluster.NewCluster(nodeName, gossipPort, grpcPort, "",
 		func(name string) { ring.AddNode(name) },
 		func(name string) { /* handle leave if needed */ },
 	)

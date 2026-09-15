@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/vnmchuo/gocron-dist/internal/cluster"
-	"github.com/vnmchuo/gocron-dist/internal/hash"
-	"github.com/vnmchuo/gocron-dist/internal/scheduler"
+	"github.com/vnmchuo/gocron-dist/pkg/cluster"
+	"github.com/vnmchuo/gocron-dist/pkg/hash"
+	"github.com/vnmchuo/gocron-dist/pkg/scheduler"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"

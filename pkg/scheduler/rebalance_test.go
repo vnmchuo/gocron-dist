@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vnmchuo/gocron-dist/internal/hash"
+	"github.com/vnmchuo/gocron-dist/pkg/hash"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 

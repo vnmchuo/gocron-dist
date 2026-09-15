@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-15
+
+### Added
+- **Pluggable Job Execution Hook**: Added `Executor JobExecutor` callback on `scheduler.Engine`, allowing external services to inject custom execution logic (e.g. rate-limiting, webhook dispatch, retry/backoff handling).
+- **Rate-Limiting Metadata on Jobs**: Added `RateLimitKey` and `Weight` fields to `scheduler.Job`.
+- **Public Package Exposure**: Promoted all core components (`cluster`, `hash`, `scheduler`, `storage`, `telemetry`) from `internal/` to `pkg/`, transforming `gocron-dist` into an open, reusable Go library.
+
+### Changed
+- **Modernized Dependencies**: Aligned `google.golang.org/grpc`, `protobuf`, and `genproto` submodules with latest Go runtime.
+
 ## [0.3.0] - 2026-02-21
 
 ### Added

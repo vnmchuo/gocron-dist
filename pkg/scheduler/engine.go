@@ -23,6 +23,10 @@ type Storer interface {
 	Close() error
 }
 
+// JobExecutor is a function executed when a scheduled job is due.
+// If it returns an error, the error is recorded and job lifecycle is handled accordingly.
+type JobExecutor func(ctx context.Context, j *Job) error
+
 type Engine struct {
 	queue      JobQueue
 	mu         sync.Mutex
@@ -32,6 +36,7 @@ type Engine struct {
 	Ring       Router
 	Cluster    Manager
 	Tracer     trace.Tracer
+	Executor   JobExecutor // Pluggable job execution callback
 }
 
 type Router interface {
@@ -183,11 +188,19 @@ func (e *Engine) execute(j *Job) {
 		}
 	}()
 
-	log.Printf("[%s] Executing job: %s\n", time.Now().Format("15:04:05"), j.Payload)
-	j.RunCount++
+	if e.Executor != nil {
+		if err := e.Executor(ctx, j); err != nil {
+			log.Printf("[Engine] Job %s execution failed or deferred: %v\n", j.ID, err)
+			span.RecordError(err)
+			return
+		}
+	} else {
+		log.Printf("[%s] Executing job: %s\n", time.Now().Format("15:04:05"), j.Payload)
+		// Simulate work
+		time.Sleep(100 * time.Millisecond)
+	}
 
-	// Simulate work
-	time.Sleep(100 * time.Millisecond)
+	j.RunCount++
 
 	// Check if job should be repeated
 	shouldRepeat := false

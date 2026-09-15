@@ -4,13 +4,15 @@ import "time"
 
 // Job represents a task to be executed
 type Job struct {
-	ID             string
-	Payload        string
-	CronExpr       string        // Example: "*/5 * * * *"
-	NextRun        time.Time     // When this job should run next
-	RepeatInterval time.Duration // Interval for recurring jobs
-	MaxRuns        int           // Maximum number of runs (0 = unlimited)
-	RunCount       int           // Number of times the job has been executed
+	ID             string        `json:"id"`
+	Payload        string        `json:"payload"`
+	CronExpr       string        `json:"cron_expr,omitempty"`
+	NextRun        time.Time     `json:"next_run"`
+	RepeatInterval time.Duration `json:"repeat_interval,omitempty"`
+	MaxRuns        int           `json:"max_runs,omitempty"`
+	RunCount       int           `json:"run_count"`
+	RateLimitKey   string        `json:"rate_limit_key,omitempty"`
+	Weight         int           `json:"weight,omitempty"`
 }
 
 // PriorityQueue implements heap.Interface

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vnmchuo/gocron-dist/internal/scheduler"
+	"github.com/vnmchuo/gocron-dist/pkg/scheduler"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -101,4 +101,39 @@ func TestEngine_Run(t *testing.T) {
 
 	// In a real test we would mock the execution function or check side effects
 	// validation implementation pending better observability in Engine
+}
+
+func TestEngine_CustomExecutor(t *testing.T) {
+	engine := scheduler.NewEngine(testTracer)
+	engine.Storage = NewMockStore()
+
+	executed := make(chan string, 1)
+	engine.Executor = func(ctx context.Context, j *scheduler.Job) error {
+		executed <- j.ID
+		return nil
+	}
+
+	job := &scheduler.Job{
+		ID:           "job-custom",
+		Payload:      "custom-work",
+		RateLimitKey: "tenant-1",
+		Weight:       2,
+		NextRun:      time.Now().Add(50 * time.Millisecond),
+	}
+
+	engine.AddJob(job)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	go engine.Run(ctx)
+
+	select {
+	case id := <-executed:
+		if id != "job-custom" {
+			t.Fatalf("expected job-custom, got %s", id)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for custom executor to run")
+	}
 }
