@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 
 	"github.com/hashicorp/memberlist"
 )
@@ -47,6 +48,13 @@ func NewCluster(nodeName string, port int, grpcPort int, joinAddr string, onJoin
 	config.Name = nodeName
 	config.BindPort = port
 	config.AdvertisePort = port
+
+	if bindAddr := os.Getenv("BIND_ADDR"); bindAddr != "" {
+		config.BindAddr = bindAddr
+	}
+	if advAddr := os.Getenv("ADVERTISE_ADDR"); advAddr != "" {
+		config.AdvertiseAddr = advAddr
+	}
 
 	// To prevent logs from being too noisy in the terminal
 	config.LogOutput = io.Discard
